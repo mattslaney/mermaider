@@ -1,32 +1,263 @@
 import mermaid from 'mermaid';
+import { clampRatio, layouts, resolveLayout, type Layout, type Pane } from './layout.ts';
 import './style.css';
 
-const source = `flowchart LR
+type Theme = 'light' | 'dark';
+
+interface State {
+  source: string;
+  layout: Layout;
+  ratio: number;
+  collapsed: Pane | null;
+  theme: Theme;
+}
+
+const STORAGE_KEY = 'mermaider-state-v1';
+const defaultSource = `flowchart LR
   Idea([Idea]) --> Draft[Write Mermaid]
   Draft --> Preview{Looks right?}
   Preview -- Yes --> Export[Export PNG]
   Preview -- No --> Draft`;
 
+const defaultState: State = {
+  source: defaultSource,
+  layout: 'auto',
+  ratio: 0.5,
+  collapsed: null,
+  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+};
+
+function loadState(): State {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<State>;
+    return {
+      source: typeof saved.source === 'string' ? saved.source : defaultState.source,
+      layout: layouts.includes(saved.layout as Layout) ? (saved.layout as Layout) : defaultState.layout,
+      ratio: typeof saved.ratio === 'number' ? clampRatio(saved.ratio) : defaultState.ratio,
+      collapsed: saved.collapsed === 'source' || saved.collapsed === 'preview' ? saved.collapsed : null,
+      theme: saved.theme === 'light' || saved.theme === 'dark' ? saved.theme : defaultState.theme,
+    };
+  } catch {
+    return defaultState;
+  }
+}
+
+const state = loadState();
+
 document.querySelector<HTMLElement>('#app')!.innerHTML = `
-  <header>
-    <h1>Mermaider</h1>
-    <p>Edit Mermaid source and see the result.</p>
-  </header>
-  <div class="workspace">
-    <textarea aria-label="Mermaid source" spellcheck="false">${source}</textarea>
-    <section class="preview" aria-label="Diagram preview"></section>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <h1>Mermaider</h1>
+          <p>Shape ideas in plain text.</p>
+        </div>
+      </div>
+      <div class="controls" aria-label="Editor controls">
+        <label>
+          <span>Layout</span>
+          <select id="layout">
+            <option value="auto">Auto</option>
+            <option value="source-left">Source left</option>
+            <option value="preview-top">Preview top</option>
+            <option value="preview-left">Preview left</option>
+            <option value="source-top">Source top</option>
+          </select>
+        </label>
+        <button id="collapse-source" type="button">Hide source</button>
+        <button id="collapse-preview" type="button">Hide preview</button>
+        <button id="theme" type="button"></button>
+      </div>
+    </header>
+
+    <main class="workspace" data-axis="horizontal">
+      <section class="pane source-pane" aria-labelledby="source-heading">
+        <div class="pane-heading">
+          <h2 id="source-heading">Source</h2>
+          <span>Mermaid</span>
+        </div>
+        <textarea id="source" aria-label="Mermaid source" aria-describedby="render-error" spellcheck="false"></textarea>
+      </section>
+
+      <div id="separator" class="separator" role="separator" tabindex="0" aria-label="Resize panes" aria-valuemin="15" aria-valuemax="85">
+        <span aria-hidden="true"></span>
+      </div>
+
+      <section class="pane preview-pane" aria-labelledby="preview-heading">
+        <div class="pane-heading">
+          <h2 id="preview-heading">Preview</h2>
+          <span id="render-status" role="status" aria-live="polite">Rendering</span>
+        </div>
+        <div id="preview" class="preview"></div>
+        <p id="render-error" class="render-error" role="alert" hidden></p>
+      </section>
+    </main>
   </div>
 `;
 
-const editor = document.querySelector<HTMLTextAreaElement>('textarea')!;
-const preview = document.querySelector<HTMLElement>('.preview')!;
+const workspace = document.querySelector<HTMLElement>('.workspace')!;
+const sourcePane = document.querySelector<HTMLElement>('.source-pane')!;
+const previewPane = document.querySelector<HTMLElement>('.preview-pane')!;
+const separator = document.querySelector<HTMLElement>('#separator')!;
+const editor = document.querySelector<HTMLTextAreaElement>('#source')!;
+const preview = document.querySelector<HTMLElement>('#preview')!;
+const errorDisplay = document.querySelector<HTMLElement>('#render-error')!;
+const statusDisplay = document.querySelector<HTMLElement>('#render-status')!;
+const layoutSelect = document.querySelector<HTMLSelectElement>('#layout')!;
+const sourceButton = document.querySelector<HTMLButtonElement>('#collapse-source')!;
+const previewButton = document.querySelector<HTMLButtonElement>('#collapse-preview')!;
+const themeButton = document.querySelector<HTMLButtonElement>('#theme')!;
 
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+editor.value = state.source;
+layoutSelect.value = state.layout;
 
-async function render() {
-  const { svg } = await mermaid.render(`diagram-${Date.now()}`, editor.value);
-  preview.innerHTML = svg;
+function persist() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-editor.addEventListener('input', () => void render());
-void render();
+function updateCollapseControls() {
+  sourceButton.textContent = state.collapsed === 'source' ? 'Show source' : 'Hide source';
+  previewButton.textContent = state.collapsed === 'preview' ? 'Show preview' : 'Hide preview';
+  sourceButton.setAttribute('aria-pressed', String(state.collapsed === 'source'));
+  previewButton.setAttribute('aria-pressed', String(state.collapsed === 'preview'));
+}
+
+function applyLayout() {
+  const { axis, first } = resolveLayout(state.layout, window.innerWidth, window.innerHeight);
+  const sourceFirst = first === 'source';
+
+  workspace.dataset.axis = axis;
+  workspace.dataset.collapsed = state.collapsed ?? '';
+  workspace.style.setProperty('--first', `${state.ratio}fr`);
+  workspace.style.setProperty('--second', `${1 - state.ratio}fr`);
+  sourcePane.style.order = sourceFirst ? '0' : '2';
+  separator.style.order = '1';
+  previewPane.style.order = sourceFirst ? '2' : '0';
+  sourcePane.hidden = state.collapsed === 'source';
+  previewPane.hidden = state.collapsed === 'preview';
+  separator.hidden = state.collapsed !== null;
+  separator.setAttribute('aria-orientation', axis);
+  separator.setAttribute('aria-valuenow', String(Math.round(state.ratio * 100)));
+  updateCollapseControls();
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  themeButton.textContent = `Theme: ${state.theme === 'light' ? 'Light' : 'Dark'}`;
+}
+
+let renderQueue: Promise<void> = Promise.resolve();
+let diagramId = 0;
+let renderVersion = 0;
+let renderTimer = 0;
+
+function renderSvg(source: string, theme: Theme): Promise<string> {
+  const task = renderQueue.then(async () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: theme === 'dark' ? 'dark' : 'default',
+    });
+    return (await mermaid.render(`diagram-${++diagramId}`, source)).svg;
+  });
+  renderQueue = task.then(() => undefined, () => undefined);
+  return task;
+}
+
+function requestRender(delay = 0) {
+  const version = ++renderVersion;
+  window.clearTimeout(renderTimer);
+  statusDisplay.textContent = 'Rendering';
+  renderTimer = window.setTimeout(() => {
+    void renderSvg(state.source, state.theme).then(
+      (svg) => {
+        if (version !== renderVersion) return;
+        preview.innerHTML = svg;
+        errorDisplay.hidden = true;
+        statusDisplay.textContent = 'Ready';
+      },
+      (error: unknown) => {
+        if (version !== renderVersion) return;
+        errorDisplay.textContent = error instanceof Error ? error.message : String(error);
+        errorDisplay.hidden = false;
+        statusDisplay.textContent = 'Syntax error';
+      },
+    );
+  }, delay);
+}
+
+editor.addEventListener('input', () => {
+  state.source = editor.value;
+  persist();
+  requestRender(180);
+});
+
+layoutSelect.addEventListener('change', () => {
+  state.layout = layoutSelect.value as Layout;
+  state.collapsed = null;
+  persist();
+  applyLayout();
+});
+
+sourceButton.addEventListener('click', () => {
+  state.collapsed = state.collapsed === 'source' ? null : 'source';
+  persist();
+  applyLayout();
+});
+
+previewButton.addEventListener('click', () => {
+  state.collapsed = state.collapsed === 'preview' ? null : 'preview';
+  persist();
+  applyLayout();
+});
+
+themeButton.addEventListener('click', () => {
+  state.theme = state.theme === 'light' ? 'dark' : 'light';
+  persist();
+  applyTheme();
+  requestRender();
+});
+
+separator.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return;
+  separator.setPointerCapture(event.pointerId);
+  document.body.classList.add('is-resizing');
+});
+
+separator.addEventListener('pointermove', (event) => {
+  if (!separator.hasPointerCapture(event.pointerId)) return;
+  const rect = workspace.getBoundingClientRect();
+  const ratio = workspace.dataset.axis === 'horizontal'
+    ? (event.clientX - rect.left) / rect.width
+    : (event.clientY - rect.top) / rect.height;
+  state.ratio = clampRatio(ratio);
+  applyLayout();
+});
+
+separator.addEventListener('pointerup', (event) => {
+  if (!separator.hasPointerCapture(event.pointerId)) return;
+  separator.releasePointerCapture(event.pointerId);
+  document.body.classList.remove('is-resizing');
+  persist();
+});
+
+separator.addEventListener('keydown', (event) => {
+  const vertical = workspace.dataset.axis === 'vertical';
+  const decrement = vertical ? event.key === 'ArrowUp' : event.key === 'ArrowLeft';
+  const increment = vertical ? event.key === 'ArrowDown' : event.key === 'ArrowRight';
+  if (!decrement && !increment && event.key !== 'Home' && event.key !== 'End') return;
+
+  event.preventDefault();
+  state.ratio = event.key === 'Home' ? 0.15 : event.key === 'End' ? 0.85 : clampRatio(state.ratio + (increment ? 0.025 : -0.025));
+  persist();
+  applyLayout();
+});
+
+window.addEventListener('resize', () => {
+  if (state.layout === 'auto') applyLayout();
+});
+
+applyTheme();
+applyLayout();
+requestRender();
