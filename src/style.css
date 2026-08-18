@@ -39,8 +39,7 @@ textarea {
 }
 
 button,
-select,
-.export-menu summary {
+select {
   min-height: 2.25rem;
   border: 1px solid var(--border);
   border-radius: 0.4rem;
@@ -54,9 +53,7 @@ button {
 }
 
 button:hover,
-button[aria-pressed='true'],
-.export-menu summary:hover,
-.export-menu[open] summary {
+button[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -64,7 +61,6 @@ button[aria-pressed='true'],
 button:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-.export-menu summary:focus-visible,
 .separator:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -141,55 +137,81 @@ h1 {
   padding: 0.35rem 1.8rem 0.35rem 0.55rem;
 }
 
-.export-menu {
-  position: relative;
-}
-
-.export-menu summary {
-  display: grid;
-  padding: 0.4rem 0.65rem;
-  cursor: pointer;
-  list-style: none;
-  place-items: center;
-}
-
-.export-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.export-panel {
-  position: absolute;
-  z-index: 10;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  display: grid;
-  width: min(18rem, calc(100vw - 1.1rem));
-  padding: 1rem;
-  gap: 0.8rem;
+.export-dialog {
+  width: min(68rem, calc(100vw - 2rem));
+  max-width: none;
+  height: min(48rem, calc(100vh - 2rem));
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 0.55rem;
+  border-radius: 0.75rem;
+  color: inherit;
   background: var(--panel);
-  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 18%);
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 35%);
 }
 
-.export-panel h2 {
-  font-size: 0.82rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.export-panel label:not(.check-control) {
+.export-dialog[open] {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+
+.export-dialog::backdrop {
+  background: rgb(8 15 20 / 72%);
+  backdrop-filter: blur(3px);
+}
+
+.export-header,
+.export-settings,
+.export-footer,
+.export-footer > div {
+  display: flex;
   align-items: center;
-  grid-template-columns: 1fr auto;
-  gap: 0.75rem;
 }
 
-.export-panel select {
-  min-width: 7rem;
+.export-header {
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
-.export-panel input[type='color'] {
+.export-header h2 {
+  font-size: 1rem;
+}
+
+.export-header p,
+.export-status {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.close-button {
+  color: var(--muted);
+}
+
+.export-settings {
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 0.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.export-settings label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.export-settings select {
+  min-width: 7.5rem;
+  padding: 0.35rem 1.8rem 0.35rem 0.55rem;
+}
+
+.export-settings input[type='color'] {
   width: 3rem;
   height: 2.25rem;
   padding: 0.15rem;
@@ -198,8 +220,58 @@ h1 {
   background: var(--panel);
 }
 
-.export-panel input[type='color']:disabled {
+.export-settings input[type='color']:disabled {
   opacity: 0.4;
+}
+
+.export-preview {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  padding: 1.5rem;
+  overflow: auto;
+  color: #39434a;
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #e4e7e9 25%, transparent 25%),
+    linear-gradient(-45deg, #e4e7e9 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e4e7e9 75%),
+    linear-gradient(-45deg, transparent 75%, #e4e7e9 75%);
+  background-position: 0 0, 0 0.6rem, 0.6rem -0.6rem, -0.6rem 0;
+  background-size: 1.2rem 1.2rem;
+  place-items: center;
+}
+
+.export-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0.35rem 1.5rem rgb(0 0 0 / 15%);
+}
+
+.export-preview img[hidden] {
+  display: none;
+}
+
+.export-error {
+  padding: 0.7rem 1.1rem;
+  border-top: 1px solid #c94242;
+  color: #8c1f1f;
+  background: #fff0f0;
+  font: 0.78rem/1.4 ui-monospace, monospace;
+}
+
+.export-footer {
+  justify-content: space-between;
+  min-height: 4rem;
+  padding: 0.75rem 1.1rem;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.export-footer > div {
+  gap: 0.5rem;
 }
 
 .export-stage {
@@ -212,6 +284,7 @@ h1 {
 
 .check-control {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -394,5 +467,23 @@ textarea {
 
   .controls button {
     font-size: 0.78rem;
+  }
+
+  .export-dialog {
+    width: calc(100vw - 1rem);
+    height: calc(100vh - 1rem);
+  }
+
+  .export-settings {
+    align-content: start;
+  }
+
+  .export-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .export-footer > div {
+    justify-content: flex-end;
   }
 }
