@@ -1,4 +1,5 @@
 import mermaid from 'mermaid';
+import { diagramFilename } from './filename.ts';
 import { clampRatio, layouts, resolveLayout, type Layout, type Pane } from './layout.ts';
 import './style.css';
 
@@ -7,6 +8,7 @@ const mermaidThemes = ['default', 'neutral', 'dark', 'forest', 'base'] as const;
 type MermaidTheme = (typeof mermaidThemes)[number];
 
 interface State {
+  name: string;
   source: string;
   layout: Layout;
   ratio: number;
@@ -25,6 +27,7 @@ const defaultSource = `flowchart LR
   Preview -- No --> Draft`;
 
 const defaultState: State = {
+  name: 'My diagram',
   source: defaultSource,
   layout: 'auto',
   ratio: 0.5,
@@ -39,6 +42,7 @@ function loadState(): State {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Omit<Partial<State>, 'exportTheme'> & { exportTheme?: MermaidTheme | 'light' };
     return {
+      name: typeof saved.name === 'string' ? saved.name : defaultState.name,
       source: typeof saved.source === 'string' ? saved.source : defaultState.source,
       layout: layouts.includes(saved.layout as Layout) ? (saved.layout as Layout) : defaultState.layout,
       ratio: typeof saved.ratio === 'number' ? clampRatio(saved.ratio) : defaultState.ratio,
@@ -89,7 +93,10 @@ document.querySelector<HTMLElement>('#app')!.innerHTML = `
       <section class="pane source-pane" aria-labelledby="source-heading">
         <div class="pane-heading">
           <h2 id="source-heading">Source</h2>
-          <span>Mermaid</span>
+          <label class="diagram-name">
+            <span>Diagram name</span>
+            <input id="diagram-name" type="text" maxlength="120" placeholder="Untitled diagram" />
+          </label>
         </div>
         <textarea id="source" aria-label="Mermaid source" aria-describedby="render-error" spellcheck="false"></textarea>
       </section>
@@ -101,9 +108,17 @@ document.querySelector<HTMLElement>('#app')!.innerHTML = `
       <section class="pane preview-pane" aria-labelledby="preview-heading">
         <div class="pane-heading">
           <h2 id="preview-heading">Preview</h2>
-          <span id="render-status" role="status" aria-live="polite">Rendering</span>
+          <div class="preview-tools">
+            <span id="render-status" role="status" aria-live="polite">Rendering</span>
+            <div class="view-controls" aria-label="Preview view controls">
+              <button id="zoom-out" type="button" aria-label="Zoom out">-</button>
+              <span id="zoom-level">100%</span>
+              <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+              <button id="reset-view" type="button">Reset</button>
+            </div>
+          </div>
         </div>
-        <div id="preview" class="preview"></div>
+        <div id="preview" class="preview"><div id="preview-canvas" class="preview-canvas"></div></div>
         <p id="render-error" class="render-error" role="alert" hidden></p>
       </section>
     </main>
@@ -161,8 +176,10 @@ const workspace = document.querySelector<HTMLElement>('.workspace')!;
 const sourcePane = document.querySelector<HTMLElement>('.source-pane')!;
 const previewPane = document.querySelector<HTMLElement>('.preview-pane')!;
 const separator = document.querySelector<HTMLElement>('#separator')!;
+const nameInput = document.querySelector<HTMLInputElement>('#diagram-name')!;
 const editor = document.querySelector<HTMLTextAreaElement>('#source')!;
 const preview = document.querySelector<HTMLElement>('#preview')!;
+const previewCanvas = document.querySelector<HTMLElement>('#preview-canvas')!;
 const errorDisplay = document.querySelector<HTMLElement>('#render-error')!;
 const statusDisplay = document.querySelector<HTMLElement>('#render-status')!;
 const layoutSelect = document.querySelector<HTMLSelectElement>('#layout')!;
@@ -181,7 +198,12 @@ const exportError = document.querySelector<HTMLElement>('#export-error')!;
 const exportStatus = document.querySelector<HTMLElement>('#export-status')!;
 const copyExportButton = document.querySelector<HTMLButtonElement>('#copy-export')!;
 const downloadExportButton = document.querySelector<HTMLButtonElement>('#download-export')!;
+const zoomOutButton = document.querySelector<HTMLButtonElement>('#zoom-out')!;
+const zoomInButton = document.querySelector<HTMLButtonElement>('#zoom-in')!;
+const resetViewButton = document.querySelector<HTMLButtonElement>('#reset-view')!;
+const zoomLevel = document.querySelector<HTMLElement>('#zoom-level')!;
 
+nameInput.value = state.name;
 editor.value = state.source;
 layoutSelect.value = state.layout;
 exportThemeSelect.value = state.exportTheme;
@@ -251,7 +273,7 @@ function requestRender(delay = 0) {
     void renderSvg(state.source, state.theme === 'dark' ? 'dark' : 'default').then(
       (svg) => {
         if (version !== renderVersion) return;
-        preview.innerHTML = svg;
+        previewCanvas.innerHTML = svg;
         errorDisplay.hidden = true;
         statusDisplay.textContent = 'Ready';
       },
@@ -269,6 +291,12 @@ editor.addEventListener('input', () => {
   state.source = editor.value;
   persist();
   requestRender(180);
+});
+
+nameInput.addEventListener('input', () => {
+  state.name = nameInput.value;
+  exportImage.alt = `${state.name.trim() || 'Untitled'} Mermaid diagram`;
+  persist();
 });
 
 layoutSelect.addEventListener('change', () => {
@@ -454,9 +482,66 @@ downloadExportButton.addEventListener('click', () => {
   if (!exportUrl) return;
   const link = document.createElement('a');
   link.href = exportUrl;
-  link.download = `mermaid-diagram-${state.exportTheme}.png`;
+  link.download = `${diagramFilename(state.name)}.png`;
   link.click();
 });
+
+let zoom = 1;
+let panX = 0;
+let panY = 0;
+let panStart: { pointerId: number; x: number; y: number; panX: number; panY: number } | null = null;
+
+function applyView() {
+  previewCanvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
+  zoomOutButton.disabled = zoom <= 0.25;
+  zoomInButton.disabled = zoom >= 4;
+}
+
+function setZoom(value: number) {
+  zoom = Math.min(4, Math.max(0.25, value));
+  applyView();
+}
+
+function resetView() {
+  zoom = 1;
+  panX = 0;
+  panY = 0;
+  applyView();
+}
+
+zoomOutButton.addEventListener('click', () => setZoom(zoom / 1.25));
+zoomInButton.addEventListener('click', () => setZoom(zoom * 1.25));
+resetViewButton.addEventListener('click', resetView);
+
+preview.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  setZoom(zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1));
+}, { passive: false });
+
+preview.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return;
+  preview.setPointerCapture(event.pointerId);
+  panStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX, panY };
+  preview.classList.add('is-panning');
+});
+
+preview.addEventListener('pointermove', (event) => {
+  if (!panStart || event.pointerId !== panStart.pointerId) return;
+  panX = panStart.panX + event.clientX - panStart.x;
+  panY = panStart.panY + event.clientY - panStart.y;
+  applyView();
+});
+
+function stopPanning(event: PointerEvent) {
+  if (!panStart || event.pointerId !== panStart.pointerId) return;
+  if (preview.hasPointerCapture(event.pointerId)) preview.releasePointerCapture(event.pointerId);
+  panStart = null;
+  preview.classList.remove('is-panning');
+}
+
+preview.addEventListener('pointerup', stopPanning);
+preview.addEventListener('pointercancel', stopPanning);
 
 separator.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
@@ -499,4 +584,6 @@ window.addEventListener('resize', () => {
 
 applyTheme();
 applyLayout();
+exportImage.alt = `${state.name.trim() || 'Untitled'} Mermaid diagram`;
+applyView();
 requestRender();

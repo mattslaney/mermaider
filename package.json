@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test src/layout.test.js"
+    "test": "node --test src/*.test.js"
   },
   "dependencies": {
     "mermaid": "^11.16.1"
