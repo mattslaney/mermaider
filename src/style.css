@@ -39,7 +39,8 @@ textarea {
 }
 
 button,
-select {
+select,
+.export-menu summary {
   min-height: 2.25rem;
   border: 1px solid var(--border);
   border-radius: 0.4rem;
@@ -53,7 +54,9 @@ button {
 }
 
 button:hover,
-button[aria-pressed='true'] {
+button[aria-pressed='true'],
+.export-menu summary:hover,
+.export-menu[open] summary {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -61,6 +64,7 @@ button[aria-pressed='true'] {
 button:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
+.export-menu summary:focus-visible,
 .separator:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -135,6 +139,88 @@ h1 {
 
 .controls select {
   padding: 0.35rem 1.8rem 0.35rem 0.55rem;
+}
+
+.export-menu {
+  position: relative;
+}
+
+.export-menu summary {
+  display: grid;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+  list-style: none;
+  place-items: center;
+}
+
+.export-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-panel {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  width: min(18rem, calc(100vw - 1.1rem));
+  padding: 1rem;
+  gap: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--panel);
+  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 18%);
+}
+
+.export-panel h2 {
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.export-panel label:not(.check-control) {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+}
+
+.export-panel select {
+  min-width: 7rem;
+}
+
+.export-panel input[type='color'] {
+  width: 3rem;
+  height: 2.25rem;
+  padding: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--panel);
+}
+
+.export-panel input[type='color']:disabled {
+  opacity: 0.4;
+}
+
+.check-control {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.check-control input {
+  accent-color: var(--accent);
+}
+
+.primary-button {
+  border-color: var(--accent);
+  color: var(--panel);
+  background: var(--accent);
+  font-weight: 700;
+}
+
+.primary-button:hover {
+  color: var(--panel);
+  filter: brightness(1.08);
 }
 
 .workspace {
