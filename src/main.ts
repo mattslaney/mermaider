@@ -197,6 +197,7 @@ function renderSvg(source: string, theme: Theme): Promise<string> {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
+      htmlLabels: false,
       theme: theme === 'dark' ? 'dark' : 'default',
     });
     return (await mermaid.render(`diagram-${++diagramId}`, source)).svg;
@@ -297,13 +298,26 @@ async function exportPng() {
   try {
     const svg = await renderSvg(state.source, state.exportTheme);
     const svgDocument = new DOMParser().parseFromString(svg, 'image/svg+xml');
-    const svgElement = svgDocument.documentElement;
-    const viewBox = svgElement.getAttribute('viewBox')?.trim().split(/[ ,]+/).map(Number);
+    if (svgDocument.querySelector('parsererror')) throw new Error('The rendered SVG could not be read.');
+
+    const svgElement = document.importNode(svgDocument.documentElement, true) as unknown as SVGSVGElement;
+    let viewBox = svgElement.getAttribute('viewBox')?.trim().split(/[ ,]+/).map(Number);
     if (!viewBox || viewBox.length !== 4 || !viewBox.every(Number.isFinite) || viewBox[2] <= 0 || viewBox[3] <= 0) {
-      throw new Error('The diagram did not provide export dimensions.');
+      const stage = document.createElement('div');
+      stage.className = 'export-stage';
+      stage.append(svgElement);
+      document.body.append(stage);
+      try {
+        const bounds = svgElement.getBBox();
+        viewBox = [bounds.x, bounds.y, bounds.width, bounds.height];
+      } finally {
+        stage.remove();
+      }
     }
 
-    const [, , width, height] = viewBox;
+    const [x, y, width, height] = viewBox;
+    if (!viewBox.every(Number.isFinite) || width <= 0 || height <= 0) throw new Error('The diagram did not provide export dimensions.');
+    svgElement.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
     svgElement.setAttribute('width', String(width));
     svgElement.setAttribute('height', String(height));
     svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
