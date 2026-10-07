@@ -495,11 +495,10 @@ function applyView() {
   previewCanvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
   zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
   zoomOutButton.disabled = zoom <= 0.25;
-  zoomInButton.disabled = zoom >= 4;
 }
 
 function setZoom(value: number) {
-  zoom = Math.min(4, Math.max(0.25, value));
+  zoom = Math.max(0.25, value);
   applyView();
 }
 
